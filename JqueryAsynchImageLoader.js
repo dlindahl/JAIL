@@ -61,7 +61,9 @@
 * - offset : an offset of "500" would cause any images that are less than 500px below the bottom of the window or 500px above the top of the window to load. - Default: 0
 * - callback : function that will be called after the images are loaded - Default: ""
 * - placeholder: location of an image (such a loader) you want to display while waiting for the images to be loaded - Default: ""
-*
+* - delay : number of milliseconds to wait after the trigger event before loading images. Makes scrolling more performant - Default: 500 for 'scroll' events, 0 for everything else
+* - chunked : number of images to load at a time. This breaks apart the unloaded images into chunks and processes them seperately - Default: the number of IMGs to load
+* - chunkedDelay : number of milliseconds to wait to process each chunk. - Default: `0`
 *
 * Tested with jQuery 1.3.2+ on FF 2/3, Opera 10+, Safari 4+, Chrome on Mac and IE 6/7/8 on Win.
 *
@@ -70,7 +72,7 @@
 * @link http://github.com/sebarmeli/JAIL
 * @author Sebastiano Armeli-Battana
 * @date 05/02/2011
-* @version 0.7
+* @version 0.8
 *
 */
 
@@ -89,7 +91,10 @@
 			event : 'load+scroll',
 			callback : jQuery.noop,
 			offset : 0,
-			placeholder : false
+			placeholder : false,
+			delay : options.event == 'scroll' ? 500 : 0,
+			chunked : this.length,
+			chunkedDelay : 0
 		}, options);
 
 		var images = this;
@@ -134,7 +139,14 @@
 				}
 			}
 		},
-
+		_inChunks : function(chunkSize, data, delay, fn) {
+			setTimeout(function() {
+				$( data.splice(0, chunkSize) ).each(fn);
+				if(data.length > 0) {
+					$.asynchImageLoader._inChunks(chunkSize, data, delay, fn);
+				}
+			}, delay);
+		},
 		// Load the image - after the event is triggered on the image itself - no need
 		// to check for visibility
 		_loadOnEvent : function(e) {
@@ -162,7 +174,7 @@
 
 			clearTimeout(images.data('poller'));
 			images.data('poller', setTimeout(function() {
-				images.each(function _imageLoader(){
+				$.asynchImageLoader._inChunks(options.chunked, images, options.chunkedDelay, function _imageLoader(){
 					$.asynchImageLoader._loadImageIfVisible(options, this, triggerEl);
 				});
 
@@ -209,13 +221,12 @@
 
 			// After [timeout] has elapsed, load the remaining images if they are visible OR (if no event is specified)
 			setTimeout(function() {
-
-				if (options.event === 'load') {
-					images.each(function(){
+				if(options.event == 'load') {
+					$.asynchImageLoader._inChunks(options.chunked, images, options.chunkedDelay, function(){
 						$.asynchImageLoader._loadImage(options, $(this));
 					});
 				} else {
-					images.each(function(){
+					$.asynchImageLoader._inChunks(options.chunked, images, options.chunkedDelay, function(){
 						$.asynchImageLoader._loadImageIfVisible(options, this, images.data('triggerEl'));
 					});
 				}
